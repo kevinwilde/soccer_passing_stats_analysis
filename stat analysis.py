@@ -1,68 +1,62 @@
-stats = 'book1.txt'
+NUM_STATS = 7
+NUM_PLAYERS = 0
 
 def loadStats(filename):
     inputFile = open(filename)
-    playerstats = {}
-    count = 1
+    playerstats = []
+    count = 0
     for line in inputFile:
-        newline = line.split()
-        playerstats[newline[0] + str(count)] = (newline[1:])
-        count += 1
-    for item in playerstats:
-        for i in range(7):
-            playerstats[item][i] = float(playerstats[item][i])
+        arr = line.split()
+        if True: #(arr[NUM_STATS] == 'm'):
+            playerstats.append(arr[0:NUM_STATS + 1])
+            playerstats[count].append(' '.join(arr[NUM_STATS + 1:])) #name
+            count += 1
+    global NUM_PLAYERS
+    NUM_PLAYERS = count
+    for i in range(NUM_PLAYERS):
+        for j in range(NUM_STATS):
+            playerstats[i][j] = float(playerstats[i][j])
     return playerstats
 
+def calcAveAndStDev(playerstats):
+    import numpy
+    avesAndStDevs = []
+    for i in range(NUM_STATS):
+        lst = []
+        for j in range(NUM_PLAYERS):
+            lst.append(playerstats[j][i])
+        ave = sum(lst)/NUM_PLAYERS
+        stdev = numpy.std(lst)
+        avesAndStDevs.append([ave, stdev])
+    return avesAndStDevs
 
-def convertToZ(statdict):
-    zscores = {}
-    for item in statdict:
-        zscores[item] = [0, 0, 0, 0, 0, 0, 0]
-        #Assists
-        zscores[item][0] = (statdict[item][0] - 0.23)/0.58206
-##        zscores[item][0] = (statdict[item][0] - 0.23)/100000.0
-
-        #Key Passes per Game
-        zscores[item][1] = (statdict[item][1] - 0.821)/0.848859
-##        zscores[item][1] = (statdict[item][1] - 0.821)/100000.0
-
-        #Avg number of passes per game
-        zscores[item][2] = (statdict[item][2] - 39.9785)/17.75915
-##        zscores[item][2] = (statdict[item][2] - 39.9785)/100000.0
-
-        #Pass percentage
-        zscores[item][3] = (statdict[item][3] - 80.7045)/10.41959
-##        zscores[item][3] = (statdict[item][3] - 39.9785)/100000.0
-        
-        #accurate crosses per game
-        zscores[item][4] = (statdict[item][4] - 0.3495)/0.566927
-##        zscores[item][4] = (statdict[item][4] - 0.3495)/100000.0
-
-        #accurate long balls per game
-        zscores[item][5] = (statdict[item][5] - 2.4635)/2.347225
-##        zscores[item][5] = (statdict[item][5] - 2.4635)/100000.0
-
-        #accurate through balls per game
-        zscores[item][6] = (statdict[item][6] - 0.058)/0.196287
-##        zscores[item][6] = (statdict[item][6] - 0.058)/100000.0
+def convertToZ(playerstats):
+    zscores = []
+    avesAndStDevs = calcAveAndStDev(playerstats)
+    for i in range(NUM_PLAYERS):
+        playerZscores = []
+        for j in range(NUM_STATS):            
+            playerZscores.append((playerstats[i][j] - avesAndStDevs[j][0]) / avesAndStDevs[j][1])
+        zscores.append(playerZscores)
     return zscores
 
 
 def diffBetweenPlayers(player1, player2):
     diff = 0
-    for i in range(7):
+    for i in range(NUM_STATS):
         diff += (player1[i]-player2[i])
     return diff
 
+
 def clusterAve(cluster, playerdict):
     #cluster is a list
-    ave = [0, 0, 0, 0, 0, 0, 0]
-    for i in range(7):
+    ave = [0] * NUM_STATS
+    for i in range(NUM_STATS):
         total = 0
-        for player in cluster:
-            total+= playerdict[player][i]
+        for playerID in cluster:
+            total += playerdict[playerID][i]
         ave[i] = total/len(cluster)
-    best = 100
+    best = 999
     for player in cluster:
         playerdiff = diffBetweenPlayers(playerdict[player], ave)
         if playerdiff < best:
@@ -70,21 +64,22 @@ def clusterAve(cluster, playerdict):
             aveplayer = player
     return aveplayer
 
-    
+
 def makeClusters(k, maxMovers, statdict):
     import random
     centroids = []
     clusters = []
     for i in range(k):
-        centroidChoice = random.choice(statdict.keys())
+        centroidChoice = random.randint(0, NUM_PLAYERS)
         centroids.append(centroidChoice)
         clusters.append([centroidChoice])
 ##    print centroids
-####    print clusters
+##    print clusters
+##    temp = raw_input()
     movers = 200
     while movers >= maxMovers:
         movers = 0
-        for player in statdict:
+        for player in range(len(statdict)):
             diffs = []
             for centroid in centroids:
                 diffs.append(abs(diffBetweenPlayers(statdict[player], statdict[centroid])))
@@ -94,17 +89,20 @@ def makeClusters(k, maxMovers, statdict):
             if player not in clusters[minDiffIndex]:
                 movers += 1
                 for i in range(k):
-                    if i!= minDiffIndex:
+                    if i != minDiffIndex:
                         if player in clusters[i]:
                             clusters[i].remove(player)
+                            break
 ####                print minDiffIndex
                 clusters[minDiffIndex].append(player)
-####        print clusters
+##        print clusters
+##        temp = raw_input()
         for x in range(k):
             centroids[x] = clusterAve(clusters[x], statdict)
 ##        print centroids
 ##    print '============================================================'
     return clusters
+
 
 def loadPlayerDisplay(fileName):
     inputfile = open(fileName)
@@ -117,14 +115,14 @@ def loadPlayerDisplay(fileName):
     return d
         
     
-def displayClusters(clusters, playerdict):
+def displayClusters(clusters, playerstats):
     for i in range(len(clusters)):
         print 'Cluster #' + str(i+1) + ':'
-        for item in clusters[i]:
-            print playerdict[item] + ',',
+        for playerID in clusters[i]:
+            print playerstats[playerID][NUM_STATS + 1] + ',',
         print
         print
-    
-zdict = convertToZ(loadStats(stats))
-##print zdict
-displayClusters(makeClusters(5, 1, zdict), loadPlayerDisplay('playerdisplay.txt'))
+
+playerstats = loadStats('PlayerStats.txt')          # 'book1.txt'
+zdict = convertToZ(playerstats)
+displayClusters(makeClusters(5, 1, zdict), playerstats)     #loadPlayerDisplay('playerdisplay.txt'))
